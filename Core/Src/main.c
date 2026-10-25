@@ -204,15 +204,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if(htim->Instance == TIM2)
   {
+    //Tip：PID与PWM是自动执行的，每时每刻都在做事
+    /*获取当下的编码器COUNT*/
     current_count = (uint16_t)__HAL_TIM_GET_COUNTER(&htim1);
     delta_count = Encoder_Delta(current_count, previous_count);
     total_count += delta_count;
     
+    /*启动PID算法，双环PID串联，并计算相关值*/
     float current_speed = delta_count / dt;
 
     float target_speed = PID_Update(&position_pid, target_position, total_count, dt);
     float temporary_target = PID_Update(&speed_pid, target_speed, current_speed, dt);
     
+    /*判断方向并给CCR赋值*/
     if(temporary_target >= 0)
     {
       HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, RESET);
@@ -229,7 +233,42 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, temporary_target);
     }
 
+    /*更新count*/
     previous_count = current_count;
+
+    /*检测是否稳定在目标值附近 + 不同的运动模式*/
+    static uint8_t model = 1;
+    static uint32_t start_wait_ms = 0;
+
+    float position_error = target_position - (float)total_count;
+
+    switch(model)
+    {
+      //所谓model，其实是2个不同运动状态间的检查点，检查上一个运动是否合规，并开启下一个运动
+      case 1: //承正转2圈，启等待300ms
+        if(Motor_IsArrived(position_error, current_speed))
+        {
+          model = 2;
+          start_wait_ms = HAL_GetTick();
+        }
+        break;
+
+      case 2: //承等待300ms，启反转2圈
+        if((uint32_t)HAL_GetTick() - start_wait_ms >= 300)
+        {
+          target_position = 0U;
+          model = 3;
+        }
+        break;
+
+      case 3: //承反转2圈，启停止
+        if(Motor_IsArrived(position_error, current_speed))
+        {
+          model = 4;
+        }
+        break;
+    }
+
   }
 }
 /* USER CODE END 4 */

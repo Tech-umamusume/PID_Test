@@ -1,11 +1,18 @@
 #include "pid.h"
+#include "stdint.h"
+#include "gpio.h"
 
+static uint32_t arrival_start_ms = 0;
+static uint8_t arrival_timing = 0;
+
+/*PID重置模块*/
 void PID_Reset(volatile PID_t *pid)
 {
     pid->previous_error = 0;
     pid->integral = 0;
 }
 
+/*PID算法模块*/
 float PID_Update(volatile PID_t *pid, float target, float feedback, float dt)
 {
     float error = target - feedback;
@@ -74,4 +81,41 @@ float PID_Update(volatile PID_t *pid, float target, float feedback, float dt)
     pid->previous_error = error;
 
     return output_try;
+}
+
+/*判断重置模块*/
+void Arrival_Reset(void)
+{
+    arrival_timing = 0; //此为状态机参数
+}
+
+/*判断函数模块*/
+uint8_t Motor_IsArrived(float error, float speed)
+{
+    //核心思想：当error稳定处于一定误差内，当速度降低到一定水平内，当这种稳定状态持续到一定时间阈值后，判断为已经达到target
+    //暂时设定error阈值为5，速度阈值为5，时间阈值为100ms
+    
+    /*合规性检测，不合规就重置*/
+    if((error < -5.0f || error > 5.0f) || (speed < -5.0f || speed > 5.0f))
+    {
+        arrival_timing = 0;
+        arrival_start_ms = 0;
+        return 0;
+    }
+
+    /*第一次合规*/
+    if(arrival_timing == 0)
+    {
+        arrival_start_ms = HAL_GetTick();
+        arrival_timing = 1;
+    }
+
+    /*检测是否达到时间阈值*/
+    if(((uint32_t)HAL_GetTick() - arrival_start_ms) >= 100U)
+    {
+        arrival_timing = 0;
+        return 1;
+    }
+
+    return 0;
 }
