@@ -18,11 +18,16 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "tim.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "pid.h"
+#include "string.h"
+#include "stdio.h"
+#include <math.h>
+#include "delta.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,6 +48,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+volatile PID_t position_pid;
+volatile PID_t speed_pid;
+volatile uint16_t previous_count = 0;
+volatile uint16_t current_count = 0;
+volatile int32_t delta_count = 0;
+volatile int32_t total_count = 0;
+float_t target_position;
+float_t dt = 0.02f;
 
 /* USER CODE END PV */
 
@@ -86,14 +99,60 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  target_position = 13 * 30 * 2 * 2;
 
+  /*初始化pid参数*/
+  position_pid.Kd = 0.01;
+  position_pid.Ki = 0.5;
+  position_pid.Kp = 2;
+  position_pid.output_max = 1000;
+  position_pid.output_min = -1000;
+
+  speed_pid.Kd = 0.01;
+  speed_pid.Ki = 0.5;
+  speed_pid.Kp = 2;
+  speed_pid.output_max = 1000;
+  speed_pid.output_min = -1000;
+
+  PID_Reset(&position_pid);
+  PID_Reset(&speed_pid);
+
+  /*启动3个TIM*/
+  if(HAL_TIM_Base_Start(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+  HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1); //启动TIM3——PWM输出
+  
+  __HAL_TIM_SET_COUNTER(&htim1, 0U);
+  if(HAL_TIM_Base_Start(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL); //启动TIM1——获取编码器CNT
+  
+  __HAL_TIM_SET_COUNTER(&htim2, 0U);
+  __HAL_TIM_CLEAR_FLAG(&htim2, TIM_FLAG_UPDATE);
+  if(HAL_TIM_Base_Start_IT(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  } //启动TIM2——定时中断
+
+  /*写入初始化方向*/
+  HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(AIN2_GPIO_Port, AIN2_Pin, GPIO_PIN_RESET);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -141,7 +200,38 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == TIM2)
+  {
+    current_count = (uint16_t)__HAL_TIM_GET_COUNTER(&htim1);
+    delta_count = Encoder_Delta(current_count, previous_count);
+    total_count += delta_count;
+    
+    float current_speed = delta_count / dt;
 
+    float target_speed = PID_Update(&position_pid, target_position, total_count, dt);
+    float temporary_target = PID_Update(&speed_pid, target_speed, current_speed, dt);
+    
+    if(temporary_target >= 0)
+    {
+      HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, RESET);
+      HAL_GPIO_WritePin(AIN2_GPIO_Port, AIN2_Pin, SET);
+      
+      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, temporary_target);
+    }
+    else if(temporary_target < 0)
+    {
+      HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, SET);
+      HAL_GPIO_WritePin(AIN2_GPIO_Port, AIN2_Pin, RESET);
+
+      temporary_target = 0 - temporary_target;
+      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, temporary_target);
+    }
+
+    previous_count = current_count;
+  }
+}
 /* USER CODE END 4 */
 
 /**

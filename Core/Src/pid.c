@@ -1,12 +1,12 @@
 #include "pid.h"
 
-void PID_Reset(PID_t *pid)
+void PID_Reset(volatile PID_t *pid)
 {
     pid->previous_error = 0;
     pid->integral = 0;
 }
 
-float PID_Update(PID_t *pid, float target, float feedback, float dt)
+float PID_Update(volatile PID_t *pid, float target, float feedback, float dt)
 {
     float error = target - feedback;
     float delta_error = error - pid->previous_error;

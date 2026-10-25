@@ -59,9 +59,8 @@ targets:
             output-debug-info: enable
             use-newlib-nano: true
           linker:
-            $outputTaskExcludes: []
             $toolName: auto
-            LD_FLAGS: ""
+            LD_FLAGS: -Wl,-u,_printf_float
             LIB_FLAGS: -lm
             output-format: elf
             remove-unused-input-sections: true

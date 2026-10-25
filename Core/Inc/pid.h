@@ -13,8 +13,8 @@ typedef struct {
     float output_min;
 } PID_t;
 
-void PID_Reset(PID_t *pid);
-float PID_Update(PID_t *pid, float target, float feedback, float dt);
+void PID_Reset(volatile PID_t *pid);
+float PID_Update(volatile PID_t *pid, float target, float feedback, float dt);
 
 
 
