@@ -219,15 +219,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     /*判断方向并给CCR赋值*/
     if(temporary_target >= 0)
     {
-      HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, RESET);
-      HAL_GPIO_WritePin(AIN2_GPIO_Port, AIN2_Pin, SET);
+      HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(AIN2_GPIO_Port, AIN2_Pin, GPIO_PIN_SET);
       
       __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, temporary_target);
     }
     else if(temporary_target < 0)
     {
-      HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, SET);
-      HAL_GPIO_WritePin(AIN2_GPIO_Port, AIN2_Pin, RESET);
+      HAL_GPIO_WritePin(AIN1_GPIO_Port, AIN1_Pin, GPIO_PIN_SET);
+      HAL_GPIO_WritePin(AIN2_GPIO_Port, AIN2_Pin, GPIO_PIN_RESET);
 
       temporary_target = 0 - temporary_target;
       __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, temporary_target);
